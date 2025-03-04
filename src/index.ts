@@ -44,6 +44,11 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
 
     client.on('BootNotification', async (request: ocpp.BootNotificationRequest, cb: (response: ocpp.BootNotificationResponse) => void) => {
       cachedBootNotification = request;
+      cb({
+        status: "Accepted",
+        currentTime: new Date().toISOString(),
+        interval: 120,
+      })
     });
 
     client.on('Authorize', async (request: ocpp.AuthorizeRequest, cb: (response: ocpp.AuthorizeResponse) => void) => {
@@ -140,6 +145,7 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
         };
         console.log(`[MOCK] Accepted start of transaction`);
         cb(response);
+
         nextStartIsMock = false;
         isMocking = true;
         cp.isMocking = true;
