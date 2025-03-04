@@ -27,7 +27,7 @@ app.ws('/:url/:cpid', (ws: WSClient, req: Request) => {
     const chargePoint: ChargePointClient = {
         cpid,
         inbound_client: ws,
-        outbound_client: new WebSocket(`wss://${url}/${cpid}`),
+        outbound_client: new WebSocket(`wss://${decodeURIComponent(url)}/${cpid}`),
         is_mocking: false
     };
 
