@@ -259,9 +259,8 @@ export class ChargePoint extends EventEmitter {
                         case "StatusNotification":
                             this.client.callRequest('StatusNotification', {
                                 connectorId: 1,
-                                errorCode: 'EVCommunicationError',
-                                info: "NoInfo",
-                                status: "Faulted"
+                                errorCode: 'NoError',
+                                status: "Unavailable"
                             });
                             cb({
                                 status: "Accepted"

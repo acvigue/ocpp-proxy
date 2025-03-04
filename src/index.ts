@@ -15,6 +15,7 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
         let nextStartIsMock = false;
         let nextStopIsMock = false;
         let startMeterValue = 0;
+        let cachedBootNotification: ocpp.BootNotificationRequest | null = null;
 
         console.log(`Client ${client.getCpId()} connected`);
 
@@ -37,17 +38,11 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
             connectedClients.delete(cp.cpid);
         });
 
-        cp.on('connect', () => {
-            client.on('BootNotification', async (request: ocpp.BootNotificationRequest, cb: (response: ocpp.BootNotificationResponse) => void) => {
-                try {
-                    const response = await cp.bootNotification(request);
-                    cb(response);
-                }
-                catch (e) {
-                    console.log(e);
-                }
-            });
+        client.on('BootNotification', async (request: ocpp.BootNotificationRequest, cb: (response: ocpp.BootNotificationResponse) => void) => {
+            cachedBootNotification = request;
+        });
 
+        cp.on('connect', async () => {
             client.on('Authorize', async (request: ocpp.AuthorizeRequest, cb: (response: ocpp.AuthorizeResponse) => void) => {
                 console.log(`Client ${cp.cpid} sent Authorize, tag id ${request.idTag}`);
 
@@ -163,8 +158,9 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
                 if (isMocking) {
                     const mock_status: ocpp.StatusNotificationRequest = {
                         connectorId: request.connectorId,
-                        status: 'Faulted',
-                        errorCode: 'EVCommunicationError',
+                        status: 'Unavailable',
+                        errorCode: 'NoError',
+                        timestamp: new Date().toISOString()
                     };
                     cp.statusNotification(mock_status);
                     console.log(`[MOCK] StatusNotification sent to CSMS for ${cp.cpid} with ${mock_status.status}:${mock_status.errorCode}`);
@@ -208,6 +204,15 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
                     console.log(e);
                 }
             });
+
+            //send BootNotification to CSMS
+            if (cachedBootNotification) {
+                try {
+                    await cp.bootNotification(cachedBootNotification);
+                } catch (e) {
+                    console.log(e);
+                }
+            }
         });
 
         cp.on('close', () => {

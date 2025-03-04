@@ -5,6 +5,7 @@ import schemas from './schemas';
 import {
   ERROR_INTERNALERROR,
   ERROR_NOTIMPLEMENTED,
+  ERROR_NOTSUPPORTED,
   OcppError,
 } from './OcppError';
 import { SchemaValidator } from './SchemaValidator';
@@ -24,6 +25,7 @@ export class Protocol {
     this.eventEmitter = eventEmitter;
     this.socket = socket;
     this.socket.on('message', (message) => {
+      console.log('Received message', message.toString());
       this.onMessage(message.toString());
     });
   }
@@ -105,6 +107,11 @@ export class Protocol {
     if (this.pendingCalls[messageId]) {
       const { reject } = this.pendingCalls[messageId];
       if (reject) {
+        if (errorCode === ERROR_NOTIMPLEMENTED || errorCode === ERROR_NOTSUPPORTED) {
+          console.log(new OcppError(errorCode, errorDescription, errorDetails));
+          delete this.pendingCalls[messageId];
+          return;
+        }
         reject(new OcppError(errorCode, errorDescription, errorDetails));
       }
       delete this.pendingCalls[messageId];
