@@ -206,10 +206,10 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
             requestedMessage: 'StatusNotification',
             connectorId: mockConnectorId
           });
-        }, 2000);
+        }, 5000);
 
         //soft-reset the chargepoint
-        //cp.softReset();
+        cp.softReset();
         return;
       }
 
