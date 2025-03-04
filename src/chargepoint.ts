@@ -1,19 +1,6 @@
 import { EventEmitter } from "stream";
 import * as ocpp from "./OcppTs";
 
-/*
-callRequest(request: 'Authorize', payload: AuthorizeRequest): Promise<AuthorizeResponse>;
-    callRequest(request: 'BootNotification', payload: BootNotificationRequest): Promise<BootNotificationResponse>;
-    callRequest(request: 'DataTransfer', payload: DataTransferRequest): Promise<DataTransferResponse>;
-    callRequest(request: 'DiagnosticsStatusNotification', payload: DiagnosticsStatusNotificationRequest): Promise<DiagnosticsStatusNotificationResponse>;
-    callRequest(request: 'FirmwareStatusNotification', payload: FirmwareStatusNotificationRequest): Promise<FirmwareStatusNotificationResponse>;
-    callRequest(request: 'Heartbeat', payload: HeartbeatRequest): Promise<HeartbeatResponse>;
-    callRequest(request: 'MeterValues', payload: MeterValuesRequest): Promise<MeterValuesResponse>;
-    callRequest(request: 'StartTransaction', payload: StartTransactionRequest): Promise<StartTransactionResponse>;
-    callRequest(request: 'StatusNotification', payload: StatusNotificationRequest): Promise<StatusNotificationResponse>;
-    callRequest(request: 'StopTransaction', payload: StopTransactionRequest): Promise<StopTransactionResponse>;
-    */
-
 export declare interface ChargePoint {
     on(event: 'connect', listener: () => void): this;
     on(event: 'close', listener: (code: number, reason: Buffer) => void): this;
@@ -21,6 +8,7 @@ export declare interface ChargePoint {
 
 export class ChargePoint extends EventEmitter {
     private client: ocpp.OcppClient;
+    public isMocking: boolean = false;
     public connected: boolean = false;
 
     constructor(public cpid: string, private csms_url: string, private real_client: ocpp.OcppClientConnection) {
@@ -55,9 +43,18 @@ export class ChargePoint extends EventEmitter {
         this.client.on('ChangeConfiguration', (request: ocpp.ChangeConfigurationRequest, cb: (response: ocpp.ChangeConfigurationResponse) => void) => {
             try {
                 console.log(`CSMS (for ${cpid}) sent ChangeConfiguration`, request);
-                this.real_client.callRequest('ChangeConfiguration', request).then((response) => {
+
+                const oldRequest = JSON.stringify(request);
+                const newRequest = oldRequest.replace("ocpp.io", "evcms.me");
+                const newConfig = JSON.parse(newRequest);
+
+                this.real_client.callRequest('ChangeConfiguration', newConfig).then((response) => {
                     console.log(`Response received from EVSE ${cpid} for ChangeConfiguration`, response);
                     cb(response);
+                });
+
+                cb({
+                    status: "Accepted"
                 });
             } catch (e) {
                 console.log(e);
@@ -117,7 +114,11 @@ export class ChargePoint extends EventEmitter {
                 console.log(`CSMS (for ${cpid}) sent GetConfiguration`, request);
                 this.real_client.callRequest('GetConfiguration', request).then((response) => {
                     console.log(`Response received from EVSE ${cpid} for GetConfiguration`, response);
-                    cb(response);
+
+                    const config = JSON.stringify(response);
+                    const newConfig = config.replace("evcms.me", "ocpp.io");
+                    const newResponse = JSON.parse(newConfig);
+                    cb(newResponse as ocpp.GetConfigurationResponse);
                 });
             } catch (e) {
                 console.log(e);
@@ -151,6 +152,12 @@ export class ChargePoint extends EventEmitter {
         this.client.on('RemoteStartTransaction', (request: ocpp.RemoteStartTransactionRequest, cb: (response: ocpp.RemoteStartTransactionResponse) => void) => {
             try {
                 console.log(`CSMS (for ${cpid}) sent RemoteStartTransaction`, request);
+                if (this.isMocking) {
+                    cb({
+                        status: "Rejected"
+                    });
+                    return;
+                }
                 this.real_client.callRequest('RemoteStartTransaction', request).then((response) => {
                     console.log(`Response received from EVSE ${cpid} for RemoteStartTransaction`, response);
                     cb(response);
@@ -163,6 +170,12 @@ export class ChargePoint extends EventEmitter {
         this.client.on('RemoteStopTransaction', (request: ocpp.RemoteStopTransactionRequest, cb: (response: ocpp.RemoteStopTransactionResponse) => void) => {
             try {
                 console.log(`CSMS (for ${cpid}) sent RemoteStopTransaction`, request);
+                if (this.isMocking) {
+                    cb({
+                        status: "Rejected"
+                    });
+                    return;
+                }
                 this.real_client.callRequest('RemoteStopTransaction', request).then((response) => {
                     console.log(`Response received from EVSE ${cpid} for RemoteStopTransaction`, response);
                     cb(response);
@@ -187,6 +200,12 @@ export class ChargePoint extends EventEmitter {
         this.client.on('Reset', (request: ocpp.ResetRequest, cb: (response: ocpp.ResetResponse) => void) => {
             try {
                 console.log(`CSMS (for ${cpid}) sent Reset`, request);
+                if (this.isMocking) {
+                    cb({
+                        status: "Rejected"
+                    });
+                    return;
+                }
                 this.real_client.callRequest('Reset', request).then((response) => {
                     console.log(`Response received from EVSE ${cpid} for Reset`, response);
                     cb(response);
@@ -223,6 +242,39 @@ export class ChargePoint extends EventEmitter {
         this.client.on('TriggerMessage', (request: ocpp.TriggerMessageRequest, cb: (response: ocpp.TriggerMessageResponse) => void) => {
             try {
                 console.log(`CSMS (for ${cpid}) sent TriggerMessage`, request);
+                if (this.isMocking) {
+                    switch (request.requestedMessage) {
+                        case "BootNotification":
+                            this.real_client.callRequest('TriggerMessage', request).then((response) => {
+                                console.log(`Response received from EVSE ${cpid} for TriggerMessage`, response);
+                                cb(response);
+                            });
+                            return;
+                        case "Heartbeat":
+                            this.real_client.callRequest('TriggerMessage', request).then((response) => {
+                                console.log(`Response received from EVSE ${cpid} for TriggerMessage`, response);
+                                cb(response);
+                            });
+                            return;
+                        case "StatusNotification":
+                            this.client.callRequest('StatusNotification', {
+                                connectorId: 1,
+                                errorCode: 'EVCommunicationError',
+                                info: "NoInfo",
+                                status: "Faulted"
+                            });
+                            cb({
+                                status: "Accepted"
+                            });
+                            return;
+                        case "MeterValues":
+                            cb({
+                                status: "Accepted"
+                            });
+                            return;
+                    }
+                }
+
                 this.real_client.callRequest('TriggerMessage', request).then((response) => {
                     console.log(`Response received from EVSE ${cpid} for TriggerMessage`, response);
                     cb(response);
@@ -337,6 +389,16 @@ export class ChargePoint extends EventEmitter {
             throw new Error("Not connected to CSMS");
         }
         return this.client.callRequest("StopTransaction", payload);
+    }
+
+    async softReset() {
+        if (!this.connected) {
+            throw new Error("Not connected to CSMS");
+        }
+
+        return this.real_client.callRequest("Reset", {
+            type: "Hard"
+        });
     }
 
     async close(code?: number, reason?: Buffer) {

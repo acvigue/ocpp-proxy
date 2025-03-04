@@ -39,10 +39,8 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
 
         cp.on('connect', () => {
             client.on('BootNotification', async (request: ocpp.BootNotificationRequest, cb: (response: ocpp.BootNotificationResponse) => void) => {
-                console.log(`Client ${cp.cpid} sent BootNotification`, request);
                 try {
                     const response = await cp.bootNotification(request);
-                    console.log(`Response received from CSMS for ${cp.cpid} for BootNotification`, response);
                     cb(response);
                 }
                 catch (e) {
@@ -51,7 +49,7 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
             });
 
             client.on('Authorize', async (request: ocpp.AuthorizeRequest, cb: (response: ocpp.AuthorizeResponse) => void) => {
-                console.log(`Client ${cp.cpid} sent Authorize`, request);
+                console.log(`Client ${cp.cpid} sent Authorize, tag id ${request.idTag}`);
 
                 //we may have to mock the response from the CSMS
                 if (mockTags.includes(request.idTag)) {
@@ -60,7 +58,7 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
                             status: 'Accepted'
                         }
                     };
-                    console.log(`[MOCK] Response received from CSMS for ${cp.cpid} for Authorize`, response);
+                    console.log(`[MOCK] Authorized tag ${request.idTag}`);
                     cb(response);
                     nextStartIsMock = true;
                     return;
@@ -68,7 +66,6 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
 
                 try {
                     const response = await cp.authorize(request);
-                    console.log(`Response received from CSMS for ${cp.cpid} for Authorize`, response);
                     cb(response);
                 }
                 catch (e) {
@@ -77,10 +74,8 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
             });
 
             client.on('DataTransfer', async (request: ocpp.DataTransferRequest, cb: (response: ocpp.DataTransferResponse) => void) => {
-                console.log(`Client ${cp.cpid} sent DataTransfer`, request);
                 try {
                     const response = await cp.dataTransfer(request);
-                    console.log(`Response received from CSMS for ${cp.cpid} for DataTransfer`, response);
                     cb(response);
                 }
                 catch (e) {
@@ -89,10 +84,8 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
             });
 
             client.on('DiagnosticsStatusNotification', async (request: ocpp.DiagnosticsStatusNotificationRequest, cb: (response: ocpp.DiagnosticsStatusNotificationResponse) => void) => {
-                console.log(`Client ${cp.cpid} sent DiagnosticsStatusNotification`, request);
                 try {
                     const response = await cp.diagnosticsStatusNotification(request);
-                    console.log(`Response received from CSMS for ${cp.cpid} for DiagnosticsStatusNotification`, response);
                     cb(response);
                 }
                 catch (e) {
@@ -101,10 +94,8 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
             });
 
             client.on('FirmwareStatusNotification', async (request: ocpp.FirmwareStatusNotificationRequest, cb: (response: ocpp.FirmwareStatusNotificationResponse) => void) => {
-                console.log(`Client ${cp.cpid} sent FirmwareStatusNotification`, request);
                 try {
                     const response = await cp.firmwareStatusNotification(request);
-                    console.log(`Response received from CSMS for ${cp.cpid} for FirmwareStatusNotification`, response);
                     cb(response);
                 }
                 catch (e) {
@@ -113,10 +104,8 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
             });
 
             client.on('Heartbeat', async (request: ocpp.HeartbeatRequest, cb: (response: ocpp.HeartbeatResponse) => void) => {
-                console.log(`Client ${cp.cpid} sent Heartbeat`, request);
                 try {
                     const response = await cp.heartbeat(request);
-                    console.log(`Response received from CSMS for ${cp.cpid} for Heartbeat`, response);
                     cb(response);
                 }
                 catch (e) {
@@ -135,11 +124,13 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
                     catch (e) {
                         console.log(e);
                     }
+                } else {
+                    console.log(`[MOCK] Ignoring metervalues from ${cp.cpid}`);
                 }
             });
 
             client.on('StartTransaction', async (request: ocpp.StartTransactionRequest, cb: (response: ocpp.StartTransactionResponse) => void) => {
-                console.log(`Client ${cp.cpid} sent StartTransaction`, request);
+                console.log(`Client ${cp.cpid} sent StartTransaction, start meter: ${request.meterStart}`);
 
                 //we may have to mock the response from the CSMS
                 if (nextStartIsMock) {
@@ -149,18 +140,18 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
                             status: 'Accepted'
                         }
                     };
-                    console.log(`[MOCK] Response received from CSMS for ${cp.cpid} for StartTransaction`, response);
+                    console.log(`[MOCK] Accepted start of transaction`);
                     cb(response);
                     startMeterValue = request.meterStart;
                     nextStartIsMock = false;
                     isMocking = true;
+                    cp.isMocking = true;
                     nextStopIsMock = true;
                     return;
                 }
 
                 try {
                     const response = await cp.startTransaction(request);
-                    console.log(`Response received from CSMS for ${cp.cpid} for StartTransaction`, response);
                     cb(response);
                 }
                 catch (e) {
@@ -169,8 +160,6 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
             });
 
             client.on('StatusNotification', async (request: ocpp.StatusNotificationRequest, cb: (response: ocpp.StatusNotificationResponse) => void) => {
-                console.log(`Client ${cp.cpid} sent StatusNotification`, request);
-
                 if (isMocking) {
                     const mock_status: ocpp.StatusNotificationRequest = {
                         connectorId: request.connectorId,
@@ -178,12 +167,12 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
                         errorCode: 'EVCommunicationError',
                     };
                     cp.statusNotification(mock_status);
+                    console.log(`[MOCK] StatusNotification sent to CSMS for ${cp.cpid} with ${mock_status.status}:${mock_status.errorCode}`);
                     return;
                 }
 
                 try {
                     const response = await cp.statusNotification(request);
-                    console.log(`Response received from CSMS for ${cp.cpid} for StatusNotification`, response);
                     cb(response);
                 }
                 catch (e) {
@@ -192,7 +181,7 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
             });
 
             client.on('StopTransaction', async (request: ocpp.StopTransactionRequest, cb: (response: ocpp.StopTransactionResponse) => void) => {
-                console.log(`Client ${cp.cpid} sent StopTransaction`, request);
+                console.log(`Client ${cp.cpid} sent StopTransaction, stop meter: ${request.meterStop}`);
 
                 if (nextStopIsMock) {
                     const response: ocpp.StopTransactionResponse = {
@@ -200,18 +189,19 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
                             status: 'Accepted'
                         }
                     };
-                    console.log(`[MOCK] Response received from CSMS for ${cp.cpid} for StopTransaction`, response);
+                    console.log(`[MOCK] Accepted stop of transaction`);
                     cb(response);
                     isMocking = false;
+                    cp.isMocking = false;
                     nextStopIsMock = false;
 
                     //soft-reset the chargepoint
+                    cp.softReset();
                     return;
                 }
 
                 try {
                     const response = await cp.stopTransaction(request);
-                    console.log(`Response received from CSMS for ${cp.cpid} for StopTransaction`, response);
                     cb(response);
                 }
                 catch (e) {
