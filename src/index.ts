@@ -15,6 +15,7 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
     let isMocking = false;
     let nextStartIsMock = false;
     let nextStopIsMock = false;
+    let mockConnectorId = 0;
     let cachedBootNotification: ocpp.BootNotificationRequest | null = null;
 
     console.log(`Client ${client.getCpId()} connected`);
@@ -146,6 +147,7 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
         console.log(`[MOCK] Accepted start of transaction`);
         cb(response);
 
+        mockConnectorId = request.connectorId;
         nextStartIsMock = false;
         isMocking = true;
         cp.isMocking = true;
@@ -198,6 +200,13 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
         isMocking = false;
         cp.isMocking = false;
         nextStopIsMock = false;
+
+        cp.statusNotification({
+          connectorId: mockConnectorId,
+          status: 'Available',
+          errorCode: 'NoError',
+          timestamp: new Date().toISOString()
+        });
 
         //soft-reset the chargepoint
         cp.softReset();
