@@ -9,7 +9,13 @@ const redis = createClient({
   url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`
 });
 
-centralSystemSimple.listen(3000);
+redis.connect().then(() => {
+  console.log('Connected to Redis');
+  centralSystemSimple.listen(3000);
+}).catch((e) => {
+  console.log('Error connecting to Redis', e);
+});
+
 const connectedClients: Map<string, ChargePoint> = new Map();
 
 const mockTagsStr = process.env.MOCK_TAGS;
