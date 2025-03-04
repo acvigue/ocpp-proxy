@@ -201,17 +201,12 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
         cp.isMocking = false;
         nextStopIsMock = false;
 
-        try {
-          await cp.statusNotification({
-            connectorId: mockConnectorId,
-            status: 'Available',
-            errorCode: 'NoError',
-            timestamp: new Date().toISOString()
+        setTimeout(() => {
+          client.callRequest('TriggerMessage', {
+            requestedMessage: 'StatusNotification',
+            connectorId: mockConnectorId
           });
-
-        } catch (e) {
-          console.log(e);
-        }
+        }, 2000);
 
         //soft-reset the chargepoint
         cp.softReset();
