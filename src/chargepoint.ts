@@ -396,7 +396,7 @@ export class ChargePoint extends EventEmitter {
         }
 
         return this.real_client.callRequest("Reset", {
-            type: "Hard"
+            type: "Soft"
         });
     }
 
