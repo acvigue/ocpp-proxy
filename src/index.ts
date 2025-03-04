@@ -1,102 +1,231 @@
-import express, { Request, Response } from 'express';
-import expressWs from 'express-ws';
-import { RawData, WebSocket as WSClient } from 'ws';
-import { ChargePointClient } from './types';
-import fs from 'fs';
+import { ChargePoint } from "./chargepoint";
 
-const { app, getWss, applyTo } = expressWs(express());
+import * as ocpp from './OcppTs';
 
-const port = process.env.PORT || 3000;
+const centralSystemSimple = new ocpp.OcppServer();
 
-const chargePoints: ChargePointClient[] = [];
+centralSystemSimple.listen(3000);
+const connectedClients: Map<string, ChargePoint> = new Map();
 
-app.ws('/:cpid', (ws: WSClient, req: Request) => {
-    const cpid = req.params.cpid;
-    if (!cpid) {
-        ws.close();
-        return;
+const mockTags = ['1234', '5678', '9876', '5432'];
+
+centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
+    try {
+        let isMocking = false;
+        let nextStartIsMock = false;
+        let nextStopIsMock = false;
+        let startMeterValue = 0;
+
+        console.log(`Client ${client.getCpId()} connected`);
+
+        if (connectedClients.has(client.getCpId())) {
+            const cp = connectedClients.get(client.getCpId());
+            if (!cp) {
+                return;
+            }
+            cp.close();
+            connectedClients.delete(client.getCpId());
+            return;
+        }
+
+        const cp = new ChargePoint(client.getCpId(), `wss://ocpp.io/`, client);
+        connectedClients.set(client.getCpId(), cp);
+
+        client.on('close', (code: number, reason: Buffer) => {
+            cp.close();
+            client.removeAllListeners();
+            connectedClients.delete(cp.cpid);
+        });
+
+        cp.on('connect', () => {
+            client.on('BootNotification', async (request: ocpp.BootNotificationRequest, cb: (response: ocpp.BootNotificationResponse) => void) => {
+                console.log(`Client ${cp.cpid} sent BootNotification`, request);
+                try {
+                    const response = await cp.bootNotification(request);
+                    console.log(`Response received from CSMS for ${cp.cpid} for BootNotification`, response);
+                    cb(response);
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            });
+
+            client.on('Authorize', async (request: ocpp.AuthorizeRequest, cb: (response: ocpp.AuthorizeResponse) => void) => {
+                console.log(`Client ${cp.cpid} sent Authorize`, request);
+
+                //we may have to mock the response from the CSMS
+                if (mockTags.includes(request.idTag)) {
+                    const response: ocpp.AuthorizeResponse = {
+                        idTagInfo: {
+                            status: 'Accepted'
+                        }
+                    };
+                    console.log(`[MOCK] Response received from CSMS for ${cp.cpid} for Authorize`, response);
+                    cb(response);
+                    nextStartIsMock = true;
+                    return;
+                }
+
+                try {
+                    const response = await cp.authorize(request);
+                    console.log(`Response received from CSMS for ${cp.cpid} for Authorize`, response);
+                    cb(response);
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            });
+
+            client.on('DataTransfer', async (request: ocpp.DataTransferRequest, cb: (response: ocpp.DataTransferResponse) => void) => {
+                console.log(`Client ${cp.cpid} sent DataTransfer`, request);
+                try {
+                    const response = await cp.dataTransfer(request);
+                    console.log(`Response received from CSMS for ${cp.cpid} for DataTransfer`, response);
+                    cb(response);
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            });
+
+            client.on('DiagnosticsStatusNotification', async (request: ocpp.DiagnosticsStatusNotificationRequest, cb: (response: ocpp.DiagnosticsStatusNotificationResponse) => void) => {
+                console.log(`Client ${cp.cpid} sent DiagnosticsStatusNotification`, request);
+                try {
+                    const response = await cp.diagnosticsStatusNotification(request);
+                    console.log(`Response received from CSMS for ${cp.cpid} for DiagnosticsStatusNotification`, response);
+                    cb(response);
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            });
+
+            client.on('FirmwareStatusNotification', async (request: ocpp.FirmwareStatusNotificationRequest, cb: (response: ocpp.FirmwareStatusNotificationResponse) => void) => {
+                console.log(`Client ${cp.cpid} sent FirmwareStatusNotification`, request);
+                try {
+                    const response = await cp.firmwareStatusNotification(request);
+                    console.log(`Response received from CSMS for ${cp.cpid} for FirmwareStatusNotification`, response);
+                    cb(response);
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            });
+
+            client.on('Heartbeat', async (request: ocpp.HeartbeatRequest, cb: (response: ocpp.HeartbeatResponse) => void) => {
+                console.log(`Client ${cp.cpid} sent Heartbeat`, request);
+                try {
+                    const response = await cp.heartbeat(request);
+                    console.log(`Response received from CSMS for ${cp.cpid} for Heartbeat`, response);
+                    cb(response);
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            });
+
+            client.on('MeterValues', async (request: ocpp.MeterValuesRequest, cb: (response: ocpp.MeterValuesResponse) => void) => {
+                console.log(`Client ${cp.cpid} sent MeterValues`, request);
+                if (!isMocking) {
+                    try {
+                        const response = await cp.meterValues(request);
+                        console.log(`Response received from CSMS for ${cp.cpid} for MeterValues`, response);
+                        cb(response);
+                    }
+                    catch (e) {
+                        console.log(e);
+                    }
+                }
+            });
+
+            client.on('StartTransaction', async (request: ocpp.StartTransactionRequest, cb: (response: ocpp.StartTransactionResponse) => void) => {
+                console.log(`Client ${cp.cpid} sent StartTransaction`, request);
+
+                //we may have to mock the response from the CSMS
+                if (nextStartIsMock) {
+                    const response: ocpp.StartTransactionResponse = {
+                        transactionId: 1,
+                        idTagInfo: {
+                            status: 'Accepted'
+                        }
+                    };
+                    console.log(`[MOCK] Response received from CSMS for ${cp.cpid} for StartTransaction`, response);
+                    cb(response);
+                    startMeterValue = request.meterStart;
+                    nextStartIsMock = false;
+                    isMocking = true;
+                    nextStopIsMock = true;
+                    return;
+                }
+
+                try {
+                    const response = await cp.startTransaction(request);
+                    console.log(`Response received from CSMS for ${cp.cpid} for StartTransaction`, response);
+                    cb(response);
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            });
+
+            client.on('StatusNotification', async (request: ocpp.StatusNotificationRequest, cb: (response: ocpp.StatusNotificationResponse) => void) => {
+                console.log(`Client ${cp.cpid} sent StatusNotification`, request);
+
+                if (isMocking) {
+                    const mock_status: ocpp.StatusNotificationRequest = {
+                        connectorId: request.connectorId,
+                        status: 'Faulted',
+                        errorCode: 'EVCommunicationError',
+                    };
+                    cp.statusNotification(mock_status);
+                    return;
+                }
+
+                try {
+                    const response = await cp.statusNotification(request);
+                    console.log(`Response received from CSMS for ${cp.cpid} for StatusNotification`, response);
+                    cb(response);
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            });
+
+            client.on('StopTransaction', async (request: ocpp.StopTransactionRequest, cb: (response: ocpp.StopTransactionResponse) => void) => {
+                console.log(`Client ${cp.cpid} sent StopTransaction`, request);
+
+                if (nextStopIsMock) {
+                    const response: ocpp.StopTransactionResponse = {
+                        idTagInfo: {
+                            status: 'Accepted'
+                        }
+                    };
+                    console.log(`[MOCK] Response received from CSMS for ${cp.cpid} for StopTransaction`, response);
+                    cb(response);
+                    isMocking = false;
+                    nextStopIsMock = false;
+
+                    //soft-reset the chargepoint
+                    return;
+                }
+
+                try {
+                    const response = await cp.stopTransaction(request);
+                    console.log(`Response received from CSMS for ${cp.cpid} for StopTransaction`, response);
+                    cb(response);
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            });
+        });
+
+        cp.on('close', () => {
+            client.close();
+            cp.removeAllListeners();
+        });
+
+    } catch (e) {
+        console.log(e);
     }
-
-    const authHeader = req.headers.authorization;
-    const subprotocol = req.headers['sec-websocket-protocol'] || "ocpp1.6";
-
-    console.log('New connection from charge point: %s', cpid);
-    console.log('Auth header: %s', authHeader);
-    console.log('Subprotocol: %s', subprotocol);
-
-    const logFile = fs.createWriteStream(`./logs/${cpid}.log`, { flags: 'a' });
-
-    const chargePoint: ChargePointClient = {
-        cpid,
-        inbound_client: ws,
-        outbound_client: new WSClient(`wss://csms.ampup.io/ocpp/${cpid}`, [subprotocol], {
-            headers: {
-                Authorization: authHeader
-            },
-        }),
-        is_mocking: false
-    };
-
-    chargePoint.outbound_client.onopen = () => {
-        //register inbound handler
-        chargePoint.inbound_client.on('message', (data: RawData) => {
-            const eventString = data.toString();
-            try {
-                const payload = JSON.parse(eventString);
-                console.log('Received message from charge point: \n');
-                console.log(data.toString());
-                console.log('\n\n\n');
-                logFile.write('Received message from charge point: \n');
-                logFile.write(data.toString());
-                logFile.write('\n\n\n');
-                chargePoint.outbound_client.send(data);
-            } catch (error) {
-                console.error('Error occurred while parsing message from charge point', error);
-            }
-        });
-
-        chargePoint.inbound_client.on('error', (error) => {
-            console.log('Error occurred in charge point connection: %s', error);
-            chargePoint.outbound_client.close();
-            chargePoint.inbound_client.close();
-        });
-
-        chargePoint.inbound_client.on('close', () => {
-            if (chargePoint.outbound_client.readyState === 1) {
-                console.log("Disconnected from charge point, closing connection to central station");
-                chargePoint.outbound_client.close();
-            }
-        });
-    };
-
-    chargePoint.outbound_client.onclose = () => {
-        if (chargePoint.inbound_client.readyState === 1) {
-            chargePoint.inbound_client.close();
-        }
-    };
-
-    chargePoint.outbound_client.onmessage = (event) => {
-        const eventString = event.data.toString();
-        try {
-            const payload = JSON.parse(eventString);
-            logFile.write('Received message from central station: \n');
-            logFile.write(event.data.toString());
-            logFile.write('\n\n\n');
-            chargePoint.inbound_client.send(event.data);
-        } catch (error) {
-            console.error('Error occurred while parsing message from central station', error);
-        }
-    };
-
-    chargePoint.outbound_client.onerror = (error) => {
-        console.log('Error occurred in central station connection: %s', error);
-        chargePoint.outbound_client.close();
-        chargePoint.inbound_client.close();
-    };
-
-    chargePoints.push(chargePoint);
-});
-
-app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
 });

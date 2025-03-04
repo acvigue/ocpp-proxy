@@ -12,14 +12,17 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/express": "^5.0.0",
     "@types/node": "^22.13.9",
-    "express": "^4.21.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.2"
   },
   "dependencies": {
-    "@types/express-ws": "^3.0.5",
-    "express-ws": "^5.0.2"
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.5.14",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "ocpp-ts": "^0.3.0",
+    "typescript-retry-decorator": "^2.4.2",
+    "ws": "^8.18.1"
   }
 }
