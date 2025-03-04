@@ -1,8 +1,13 @@
 import { ChargePoint } from "./chargepoint";
+import { createClient } from 'redis';
 
 import * as ocpp from './OcppTs';
 
 const centralSystemSimple = new ocpp.OcppServer();
+
+const redis = createClient({
+  url: `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT}`
+});
 
 centralSystemSimple.listen(3000);
 const connectedClients: Map<string, ChargePoint> = new Map();
@@ -10,14 +15,8 @@ const connectedClients: Map<string, ChargePoint> = new Map();
 const mockTagsStr = process.env.MOCK_TAGS;
 const mockTags = mockTagsStr ? mockTagsStr.split(',') : [];
 
-centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
+centralSystemSimple.on('connection', async (client: ocpp.OcppClientConnection) => {
   try {
-    let isMocking = false;
-    let nextStartIsMock = false;
-    let nextStopIsMock = false;
-    let mockConnectorId = 0;
-    let cachedBootNotification: ocpp.BootNotificationRequest | null = null;
-
     console.log(`Client ${client.getCpId()} connected`);
 
     if (connectedClients.has(client.getCpId())) {
@@ -26,10 +25,6 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
         return;
       }
       cp.close();
-      if (cp.isMocking) {
-        isMocking = true;
-        nextStopIsMock = true;
-      }
       connectedClients.delete(client.getCpId());
       return;
     }
@@ -44,7 +39,7 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
     });
 
     client.on('BootNotification', async (request: ocpp.BootNotificationRequest, cb: (response: ocpp.BootNotificationResponse) => void) => {
-      cachedBootNotification = request;
+      await redis.set(`${cp.cpid}/cachedBootNotification`, JSON.stringify(request));
       cb({
         status: "Accepted",
         currentTime: new Date().toISOString(),
@@ -64,7 +59,8 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
         };
         console.log(`[MOCK] Authorized tag ${request.idTag}`);
         cb(response);
-        nextStartIsMock = true;
+
+        await redis.set(`${cp.cpid}/nextStartIsMock`, 'true');
         return;
       }
 
@@ -119,6 +115,7 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
 
     client.on('MeterValues', async (request: ocpp.MeterValuesRequest, cb: (response: ocpp.MeterValuesResponse) => void) => {
       console.log(`Client ${cp.cpid} sent MeterValues`, request);
+      const isMocking = await redis.get(`${cp.cpid}/isMocking`) === 'true';
       if (!isMocking) {
         try {
           const response = await cp.meterValues(request);
@@ -135,7 +132,7 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
 
     client.on('StartTransaction', async (request: ocpp.StartTransactionRequest, cb: (response: ocpp.StartTransactionResponse) => void) => {
       console.log(`Client ${cp.cpid} sent StartTransaction, start meter: ${request.meterStart}`);
-
+      const nextStartIsMock = await redis.get(`${cp.cpid}/nextStartIsMock`) === 'true';
       //we may have to mock the response from the CSMS
       if (nextStartIsMock) {
         const response: ocpp.StartTransactionResponse = {
@@ -147,11 +144,12 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
         console.log(`[MOCK] Accepted start of transaction`);
         cb(response);
 
-        mockConnectorId = request.connectorId;
-        nextStartIsMock = false;
-        isMocking = true;
         cp.isMocking = true;
-        nextStopIsMock = true;
+
+        await redis.set(`${cp.cpid}/mockConnectorId`, request.connectorId.toString());
+        await redis.set(`${cp.cpid}/nextStartIsMock`, 'false');
+        await redis.set(`${cp.cpid}/isMocking`, 'true');
+        await redis.set(`${cp.cpid}/nextStopIsMock`, 'true');
         return;
       }
 
@@ -165,6 +163,7 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
     });
 
     client.on('StatusNotification', async (request: ocpp.StatusNotificationRequest, cb: (response: ocpp.StatusNotificationResponse) => void) => {
+      const isMocking = await redis.get(`${cp.cpid}/isMocking`) === 'true';
       if (isMocking) {
         const mock_status: ocpp.StatusNotificationRequest = {
           connectorId: request.connectorId,
@@ -188,6 +187,7 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
 
     client.on('StopTransaction', async (request: ocpp.StopTransactionRequest, cb: (response: ocpp.StopTransactionResponse) => void) => {
       console.log(`Client ${cp.cpid} sent StopTransaction, stop meter: ${request.meterStop}`);
+      const nextStopIsMock = await redis.get(`${cp.cpid}/nextStopIsMock`) === 'true';
 
       if (nextStopIsMock) {
         const response: ocpp.StopTransactionResponse = {
@@ -197,9 +197,11 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
         };
         console.log(`[MOCK] Accepted stop of transaction`);
         cb(response);
-        isMocking = false;
         cp.isMocking = false;
-        nextStopIsMock = false;
+
+        await redis.set(`${cp.cpid}/isMocking`, 'false');
+        await redis.set(`${cp.cpid}/nextStopIsMock`, 'false');
+        const mockConnectorId = parseInt(await redis.get(`${cp.cpid}/mockConnectorId`) || '0');
 
         setTimeout(() => {
           client.callRequest('TriggerMessage', {
@@ -214,9 +216,6 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
             connectorId: mockConnectorId
           });
         }, 15000);
-
-        //soft-reset the chargepoint
-        //cp.softReset();
         return;
       }
 
@@ -231,6 +230,8 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
 
     cp.on('connect', async () => {
       //send BootNotification to CSMS
+      const cachedBootNotification = JSON.parse(await redis.get(`${cp.cpid}/cachedBootNotification`) || '{}');
+
       if (cachedBootNotification) {
         try {
           await cp.bootNotification(cachedBootNotification);
