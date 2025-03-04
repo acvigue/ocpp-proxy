@@ -27,7 +27,7 @@ app.ws('/:url/:cpid', (ws: WSClient, req: Request) => {
     const chargePoint: ChargePointClient = {
         cpid,
         inbound_client: ws,
-        outbound_client: new WebSocket(`wss://${decodeURIComponent(url)}/${cpid}`),
+        outbound_client: new WSClient(`wss://${decodeURIComponent(url)}/${cpid}`),
         is_mocking: false
     };
 
@@ -45,13 +45,29 @@ app.ws('/:url/:cpid', (ws: WSClient, req: Request) => {
     });
 
     chargePoint.outbound_client.onmessage = (event) => {
-        console.log('Received message from central station: \n %s \n\n\n', JSON.parse(event.data));
-        chargePoint.inbound_client.send(event.data);
+        const eventString = event.data.toString();
+        try {
+            const payload = JSON.parse(eventString);
+            console.log('Received message from central station: \n');
+            console.log(payload);
+            console.log('\n\n\n');
+            chargePoint.inbound_client.send(event.data);
+        } catch (error) {
+            console.error('Error occurred while parsing message from central station', error);
+        }
     };
 
     chargePoint.inbound_client.on('message', (data: RawData) => {
-        console.log('Received message from charge point: \n %s \n\n\n', JSON.parse(data.toString()));
-        chargePoint.outbound_client.send(data.toString());
+        const eventString = data.toString();
+        try {
+            const payload = JSON.parse(eventString);
+            console.log('Received message from charge point: \n');
+            console.log(payload);
+            console.log('\n\n\n');
+            chargePoint.outbound_client.send(data);
+        } catch (error) {
+            console.error('Error occurred while parsing message from charge point', error);
+        }
     });
 
     chargePoint.inbound_client.on('error', (error) => {
