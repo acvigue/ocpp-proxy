@@ -7,7 +7,8 @@ const centralSystemSimple = new ocpp.OcppServer();
 centralSystemSimple.listen(3000);
 const connectedClients: Map<string, ChargePoint> = new Map();
 
-const mockTags = ['1234', '5678', '9876', '5432'];
+const mockTagsStr = process.env.MOCK_TAGS;
+const mockTags = mockTagsStr ? mockTagsStr.split(',') : [];
 
 centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
     try {
