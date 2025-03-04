@@ -209,7 +209,7 @@ centralSystemSimple.on('connection', (client: ocpp.OcppClientConnection) => {
         }, 2000);
 
         //soft-reset the chargepoint
-        cp.softReset();
+        //cp.softReset();
         return;
       }
 
