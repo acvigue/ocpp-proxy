@@ -45,12 +45,22 @@ centralSystemSimple.on('connection', async (client: ocpp.OcppClientConnection) =
     });
 
     client.on('BootNotification', async (request: ocpp.BootNotificationRequest, cb: (response: ocpp.BootNotificationResponse) => void) => {
-      await redis.set(`${cp.cpid}/cachedBootNotification`, JSON.stringify(request));
-      cb({
-        status: "Accepted",
-        currentTime: new Date().toISOString(),
-        interval: 120,
-      })
+      if (!cp.connected) {
+        await redis.set(`${cp.cpid}/cachedBootNotification`, JSON.stringify(request));
+        cb({
+          status: "Accepted",
+          currentTime: new Date().toISOString(),
+          interval: 120,
+        })
+        return;
+      }
+
+      try {
+        const response = await cp.bootNotification(request);
+        cb(response);
+      } catch (e) {
+        console.log(e);
+      }
     });
 
     client.on('Authorize', async (request: ocpp.AuthorizeRequest, cb: (response: ocpp.AuthorizeResponse) => void) => {
