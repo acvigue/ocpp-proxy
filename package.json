@@ -17,13 +17,17 @@
     "typescript": "^5.8.2"
   },
   "dependencies": {
+    "@hono/node-server": "^1.15.0",
     "@types/uuid": "^10.0.0",
     "@types/ws": "^8.5.14",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
+    "hono": "^4.8.4",
     "ocpp-ts": "^0.3.0",
     "redis": "^4.7.0",
     "typescript-retry-decorator": "^2.4.2",
+    "uuid": "^11.1.0",
     "ws": "^8.18.1"
-  }
+  },
+  "packageManager": "pnpm@10.12.4+sha512.5ea8b0deed94ed68691c9bad4c955492705c5eeb8a87ef86bc62c74a26b037b08ff9570f108b2e4dbd1dd1a9186fea925e527f141c648e85af45631074680184"
 }
