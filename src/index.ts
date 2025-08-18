@@ -1,7 +1,5 @@
 import { ChargePoint } from "./chargepoint";
 import { createClient } from 'redis';
-import { Hono } from 'hono';
-import { serve } from '@hono/node-server';
 
 import * as ocpp from './OcppTs';
 
@@ -19,55 +17,6 @@ redis.connect().then(() => {
 });
 
 const connectedClients: Map<string, ChargePoint> = new Map();
-
-// Setup HTTP server with Hono
-const app = new Hono();
-
-app.get('/chargers/status', async (c) => {
-  const chargerStatuses = [];
-
-  for (const [cpid, chargePoint] of connectedClients) {
-    const status = {
-      cpid: cpid,
-      connected: chargePoint.connected,
-      isMocking: chargePoint.isMocking,
-      connectedAt: new Date().toISOString(), // You might want to track this properly
-    };
-
-    // Get additional status from Redis if available
-    try {
-      const isMocking = await redis.get(`${cpid}/isMocking`);
-      const mockConnectorId = await redis.get(`${cpid}/mockConnectorId`);
-
-      status.isMocking = isMocking === 'true';
-      if (mockConnectorId) {
-        (status as any).mockConnectorId = parseInt(mockConnectorId);
-      }
-    } catch (e) {
-      console.log(`Error getting Redis status for ${cpid}:`, e);
-    }
-
-    chargerStatuses.push(status);
-  }
-
-  return c.json({
-    totalChargers: chargerStatuses.length,
-    chargers: chargerStatuses,
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.get('/health', (c) => {
-  return c.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Start HTTP server
-serve({
-  fetch: app.fetch,
-  port: 3001,
-});
-
-console.log('HTTP API server started on port 3001');
 
 const mockTagsStr = process.env.MOCK_TAGS;
 const mockTags = mockTagsStr ? mockTagsStr.split(',') : [];
